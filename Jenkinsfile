@@ -87,8 +87,8 @@ pipeline {
                 script {
                     // Replace __IMAGE_TAG__ with the actual image tag in the YAML files
                     sh """
-                        sed -i 's/__IMAGE_TAG__/${IMAGE_TAG}/g' k8s/frontenddeployment.yaml
-                        sed -i 's/__IMAGE_TAG__/${IMAGE_TAG}/g' k8s/backenddeployment.yaml
+                        sed -i 's/__IMAGE_TAG__/${IMAGE_TAG}/g' k8s/frontend-deployment.yaml
+                        sed -i 's/__IMAGE_TAG__/${IMAGE_TAG}/g' k8s/backend-deployment.yaml
                     """
                     // Delete old deployments and services, ignoring if not found
                     sh """
