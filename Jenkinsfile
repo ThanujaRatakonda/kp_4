@@ -85,15 +85,12 @@ pipeline {
             when { expression { params.ACTION == 'FULL_PIPELINE' } }
             steps {
                 script {
-                     sh """
-                        kubectl get pvc shared-pvc || kubectl apply -f k8s/shared-pvc.yaml
-                     """
-                    // Replace __IMAGE_TAG__ with the actual image tag in the YAML files
+                    
                     sh """
                         sed -i 's/__IMAGE_TAG__/${IMAGE_TAG}/g' k8s/frontend-deployment.yaml
                         sed -i 's/__IMAGE_TAG__/${IMAGE_TAG}/g' k8s/backend-deployment.yaml
                     """
-                    // Delete old deployments and services, ignoring if not found
+                    
                     sh """
                         kubectl delete deployment frontend --ignore-not-found
                         kubectl delete deployment backend  --ignore-not-found
@@ -101,6 +98,7 @@ pipeline {
                         kubectl delete service frontend --ignore-not-found
                         kubectl delete service backend  --ignore-not-found
                         kubectl delete service database --ignore-not-found
+                        kubectl get pvc shared-pvc || kubectl apply -f k8s/shared-pvc.yaml
                     """
                     // Apply new configurations
                     sh "kubectl apply -f k8s/"
@@ -110,8 +108,6 @@ pipeline {
         stage('Scale Deployments') {
             steps {
                 script {
-                    echo "Scaling frontend & backend to ${params.REPLICA_COUNT}"
-                    echo "Scaling database to ${params.DB_REPLICA_COUNT}"
                     sh "kubectl scale deployment frontend --replicas=${params.REPLICA_COUNT}"
                     sh "kubectl scale deployment backend  --replicas=${params.REPLICA_COUNT}"
                     sh "kubectl scale statefulset database --replicas=${params.DB_REPLICA_COUNT}"
