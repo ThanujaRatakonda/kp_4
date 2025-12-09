@@ -12,8 +12,9 @@ pipeline {
             choices: ['FULL_PIPELINE', 'SCALE_ONLY'],
             description: 'Choose FULL_PIPELINE or SCALE_ONLY'
         )
-        string(name: 'REPLICA_COUNT', defaultValue: '1', description: 'Replica count for frontend & backend')
-        string(name: 'DB_REPLICA_COUNT', defaultValue: '1', description: 'Replica count for database')
+          string(name: 'FRONTEND_REPLICA_COUNT', defaultValue: '1', description: 'Replica count for frontend')
+          string(name: 'BACKEND_REPLICA_COUNT', defaultValue: '1', description: 'Replica count for backend')
+          string(name: 'DB_REPLICA_COUNT', defaultValue: '1', description: 'Replica count for database')
     }
     stages {
         stage('Checkout') {
@@ -108,8 +109,8 @@ pipeline {
         stage('Scale Deployments') {
             steps {
                 script {
-                    sh "kubectl scale deployment frontend --replicas=${params.REPLICA_COUNT}"
-                    sh "kubectl scale deployment backend  --replicas=${params.REPLICA_COUNT}"
+                    sh "kubectl scale deployment frontend --replicas=${params.FRONTEND_REPLICA_COUNT}"
+                    sh "kubectl scale deployment backend --replicas=${params.BACKEND_REPLICA_COUNT}"
                     sh "kubectl scale statefulset database --replicas=${params.DB_REPLICA_COUNT}"
                     sh "kubectl get deployments"
                 }
