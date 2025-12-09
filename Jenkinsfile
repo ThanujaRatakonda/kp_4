@@ -1,35 +1,41 @@
 pipeline {
     agent any
+
     environment {
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         HARBOR_URL = "10.131.103.92:8090"
         HARBOR_PROJECT = "kp_3"
         TRIVY_OUTPUT_JSON = "trivy-output.json"
     }
+
     parameters {
         choice(
             name: 'ACTION',
-            choices: ['FULL_PIPELINE', 'FRONTEND', 'BACKEND', 'SCALE_ONLY'],
-            description: 'Choose which microservice to run'
+            choices: ['FULL_PIPELINE', 'FRONTEND', 'BACKEND', 'DATABASE', 'SCALE_ONLY'],
+            description: 'Which microservice to build/deploy or just scale'
         )
         string(name: 'FRONTEND_REPLICA', defaultValue: '1', description: 'Frontend replica count')
         string(name: 'BACKEND_REPLICA', defaultValue: '1', description: 'Backend replica count')
         string(name: 'DB_REPLICA', defaultValue: '1', description: 'Database replica count')
     }
+
     stages {
+
         stage('Checkout') {
             when { expression { params.ACTION != 'SCALE_ONLY' } }
             steps {
                 git 'https://github.com/ThanujaRatakonda/kp_3.git'
             }
         }
+
         stage('Build Docker Images') {
-            when { expression { params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'FRONTEND' || params.ACTION == 'BACKEND' } }
+            when { expression { params.ACTION in ['FULL_PIPELINE','FRONTEND','BACKEND'] } }
             steps {
                 script {
                     def containers = []
-                    if (params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'FRONTEND') containers << [name: 'frontend', folder: 'frontend']
-                    if (params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'BACKEND') containers << [name: 'backend', folder: 'backend']
+
+                    if(params.ACTION in ['FULL_PIPELINE','FRONTEND']) { containers << [name:"frontend", folder:"frontend"] }
+                    if(params.ACTION in ['FULL_PIPELINE','BACKEND'])  { containers << [name:"backend", folder:"backend"] }
 
                     containers.each { c ->
                         echo "Building Docker image for ${c.name}..."
@@ -38,13 +44,15 @@ pipeline {
                 }
             }
         }
+
         stage('Scan Docker Images') {
-            when { expression { params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'FRONTEND' || params.ACTION == 'BACKEND' } }
+            when { expression { params.ACTION in ['FULL_PIPELINE','FRONTEND','BACKEND'] } }
             steps {
                 script {
                     def containers = []
-                    if (params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'FRONTEND') containers << 'frontend'
-                    if (params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'BACKEND') containers << 'backend'
+
+                    if(params.ACTION in ['FULL_PIPELINE','FRONTEND']) { containers << "frontend" }
+                    if(params.ACTION in ['FULL_PIPELINE','BACKEND'])  { containers << "backend" }
 
                     containers.each { img ->
                         echo "Running Trivy scan for ${img}:${IMAGE_TAG}..."
@@ -55,12 +63,14 @@ pipeline {
                             -o ${TRIVY_OUTPUT_JSON}
                         """
                         archiveArtifacts artifacts: "${TRIVY_OUTPUT_JSON}", fingerprint: true
+
                         def vulnerabilities = sh(script: """
                             jq '[.Results[] |
                                  (.Packages // [] | .[]? | select(.Severity=="CRITICAL" or .Severity=="HIGH")) +
                                  (.Vulnerabilities // [] | .[]? | select(.Severity=="CRITICAL" or .Severity=="HIGH"))
                                 ] | length' ${TRIVY_OUTPUT_JSON}
                         """, returnStdout: true).trim()
+
                         if (vulnerabilities.toInteger() > 0) {
                             error "CRITICAL/HIGH vulnerabilities found in ${img}!"
                         }
@@ -68,13 +78,15 @@ pipeline {
                 }
             }
         }
+
         stage('Push Images to Harbor') {
-            when { expression { params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'FRONTEND' || params.ACTION == 'BACKEND' } }
+            when { expression { params.ACTION in ['FULL_PIPELINE','FRONTEND','BACKEND'] } }
             steps {
                 script {
                     def containers = []
-                    if (params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'FRONTEND') containers << 'frontend'
-                    if (params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'BACKEND') containers << 'backend'
+
+                    if(params.ACTION in ['FULL_PIPELINE','FRONTEND']) { containers << "frontend" }
+                    if(params.ACTION in ['FULL_PIPELINE','BACKEND'])  { containers << "backend" }
 
                     containers.each { img ->
                         def fullImage = "${HARBOR_URL}/${HARBOR_PROJECT}/${img}:${IMAGE_TAG}"
@@ -88,53 +100,51 @@ pipeline {
                 }
             }
         }
+
         stage('Apply Kubernetes Deployment') {
-            when { expression { params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'FRONTEND' || params.ACTION == 'BACKEND' } }
+            when { expression { params.ACTION in ['FULL_PIPELINE','FRONTEND','BACKEND','DATABASE'] } }
             steps {
                 script {
-                    if (params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'FRONTEND') {
+                    // Frontend
+                    if(params.ACTION in ['FULL_PIPELINE','FRONTEND']) {
                         sh "sed -i 's/__IMAGE_TAG__/${IMAGE_TAG}/g' k8s/frontend-deployment.yaml"
-                        sh "kubectl delete deployment frontend --ignore-not-found"
-                        sh "kubectl delete service frontend --ignore-not-found"
                         sh "kubectl apply -f k8s/frontend-deployment.yaml"
-                        sh "kubectl rollout status deployment frontend --timeout=120s"
                     }
-                    if (params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'BACKEND') {
+
+                    // Backend
+                    if(params.ACTION in ['FULL_PIPELINE','BACKEND']) {
                         sh "sed -i 's/__IMAGE_TAG__/${IMAGE_TAG}/g' k8s/backend-deployment.yaml"
-                        sh "kubectl delete deployment backend --ignore-not-found"
-                        sh "kubectl delete service backend --ignore-not-found"
                         sh "kubectl apply -f k8s/backend-deployment.yaml"
-                        sh "kubectl rollout status deployment backend --timeout=120s"
                     }
-                    if (params.ACTION == 'FULL_PIPELINE') {
-                        sh "kubectl get pvc shared-pvc || kubectl apply -f k8s/shared-pvc.yaml"
-                        sh "kubectl delete statefulset database --ignore-not-found"
-                        sh "kubectl delete service database --ignore-not-found"
-                        sh "kubectl apply -f k8s/database-statefulset.yaml"
-                        sh "kubectl rollout status statefulset database --timeout=180s"
+
+                    // Database
+                    if(params.ACTION in ['FULL_PIPELINE','DATABASE']) {
+                        sh "kubectl apply -f k8s/shared-storage-class.yaml"
+                        sh "kubectl apply -f k8s/shared-pv.yaml"
+                        sh "kubectl apply -f k8s/shared-pvc.yaml"
+                        sh "kubectl apply -f k8s/database-deployment.yaml"
                     }
                 }
             }
         }
+
         stage('Scale Deployments') {
             steps {
                 script {
-                    if (params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'FRONTEND') {
+                    if(params.ACTION in ['FULL_PIPELINE','FRONTEND','SCALE_ONLY']) {
                         sh "kubectl scale deployment frontend --replicas=${params.FRONTEND_REPLICA}"
                     }
-                    if (params.ACTION == 'FULL_PIPELINE' || params.ACTION == 'BACKEND') {
+
+                    if(params.ACTION in ['FULL_PIPELINE','BACKEND','SCALE_ONLY']) {
                         sh "kubectl scale deployment backend --replicas=${params.BACKEND_REPLICA}"
                     }
-                    if (params.ACTION == 'FULL_PIPELINE') {
+
+                    if(params.ACTION in ['FULL_PIPELINE','DATABASE','SCALE_ONLY']) {
                         sh "kubectl scale statefulset database --replicas=${params.DB_REPLICA}"
                     }
-                    if (params.ACTION == 'SCALE_ONLY') {
-                        sh "kubectl scale deployment frontend --replicas=${params.FRONTEND_REPLICA}"
-                        sh "kubectl scale deployment backend --replicas=${params.BACKEND_REPLICA}"
-                        sh "kubectl scale statefulset database --replicas=${params.DB_REPLICA}"
-                    }
+
                     sh "kubectl get deployments"
-                    sh "kubectl get statefulset database || true"
+                    sh "kubectl get statefulsets"
                 }
             }
         }
