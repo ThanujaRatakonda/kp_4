@@ -4,7 +4,7 @@ pipeline {
     environment {
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         HARBOR_URL = "10.131.103.92:8090"
-        HARBOR_PROJECT = "kp_3"
+        HARBOR_PROJECT = "kp_4"
         TRIVY_OUTPUT_JSON = "trivy-output.json"
     }
 
@@ -30,7 +30,7 @@ pipeline {
         stage('Checkout') {
             when { expression { params.ACTION == 'FULL_PIPELINE' } }
             steps {
-                git 'https://github.com/ThanujaRatakonda/kp_3.git'
+                git 'https://github.com/ThanujaRatakonda/kp_4.git'
             }
         }
 
