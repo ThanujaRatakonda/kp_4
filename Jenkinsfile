@@ -159,21 +159,22 @@ pipeline {
                 }
             }
         }
-stage('Start Port Forwarding') {
-      when { expression { params.ACTION in ['FULL_PIPELINE', 'SCALE_ONLY', 'FRONTEND_ONLY', 'BACKEND_ONLY'] } }
+    stage('Start Port Forwarding') {
+    when { 
+        expression { 
+            params.ACTION in ['FULL_PIPELINE', 'SCALE_ONLY', 'FRONTEND_ONLY', 'BACKEND_ONLY'] 
+        } 
+    }
     steps {
         echo "Starting port forwarding safely..."
-
         withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
-            sh '''
-                export KUBECONFIG=$KUBECONFIG  # Ensure KUBECONFIG points to the right file
-                chmod +x ./start-port-forward.sh
-                NO_BLOCK=1 ./start-port-forward.sh  # Run in non-blocking mode
+            sh ''' 
+                chmod +x ./start-port-forward.sh   # Make the script executable
+                ./start-port-forward.sh            # Run the script
             '''
         }
         echo "Port forwarding successfully started!"
     }
 }
-
     }
 }
