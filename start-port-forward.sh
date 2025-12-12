@@ -65,7 +65,7 @@ start_pf "backend"  "svc/backend"    5001 5000
 start_pf "frontend" "svc/frontend"   4000 3000
 start_pf "database" "${TARGET_DB}"   5433 5432
 
-# Wait for readiness
+# Wait for readiness (optional, depends on your need)
 wait_port "backend"  5001
 wait_port "frontend" 4000
 wait_port "database" 5433
