@@ -61,12 +61,12 @@ else
 fi
 
 # Start port forwarding for services and pods
-start_pf "backend"  "svc/backend"    5000 5000
+start_pf "backend"  "svc/backend"    5001 5000
 start_pf "frontend" "svc/frontend"   4000 3000
 start_pf "database" "${TARGET_DB}"   5433 5432
 
 # Wait for readiness
-wait_port "backend"  5000
+wait_port "backend"  5001
 wait_port "frontend" 4000
 wait_port "database" 5433
 
